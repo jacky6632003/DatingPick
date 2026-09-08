@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#ff4d6d">
-<title>💕 Dating  Pick 共識轉盤 (Vue 3 版)</title>
+<title>💕 Dating Pick 共識轉盤 (Vue 3 版)</title>
 <!-- 載入 Vue 3 -->
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <style>
@@ -212,7 +212,7 @@ button{border:0}
           <div v-else-if="resultState.type === 'winner'">
             <div class="winner-title">🎉 恭喜抽中 🎉</div>
             <div class="winner-item">💕 {{ resultState.winner }}</div>
-            <div class="status">今天就去做這件事吧！</div>
+            <div class="status">就去做這件事吧！</div>
           </div>
           <div v-else>{{ resultState.msg }}</div>
         </template>
@@ -231,57 +231,82 @@ const COLORS = ["#FF6B6B","#FFD93D","#6BCB77","#4D96FF","#B983FF","#FF8FAB","#00
 
 /* 
   ======================================================
-  🔌 API 服務封裝層 (API Service Layer)
+  🔌 API 服務封裝層 (API Service Layer - 全 POST 方式)
   ======================================================
-  - 當 useMockAPI = true 時，使用 LocalStorage 模擬後端非同步操作
-  - 當後端 API 好了，只需將 useMockAPI 改為 false，並在對應方法填入 fetch/axios 即可
 */
 const API_CONFIG = {
-  useMockAPI: true, // 👈 待後端上線後改為 false
+  useMockAPI: true, // 👈 後端上線後改為 false
   baseURL: 'https://api.yourdomain.com/v1' // 後端 API 根網址
 };
 
 const apiService = {
-  // 1. 取得所有資料
+  // 通用 POST 封裝
+  async postRequest(url, bodyData = {}) {
+    if (API_CONFIG.useMockAPI) {
+      // 模擬網路延遲
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return null;
+    }
+    const res = await fetch(`${API_CONFIG.baseURL}${url}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyData)
+    });
+    return await res.json();
+  },
+
+  // 1. [POST] 取得所有資料
   async fetchPartnersData() {
     if (API_CONFIG.useMockAPI) {
       const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : null;
     } else {
-      // 🎯 [後端 API 接頭] GET /partners
-      const res = await fetch(`${API_CONFIG.baseURL}/partners`);
-      return await res.json();
+      const res = await this.postRequest('/partners/get');
+      return res ? res.data : null;
     }
   },
 
-  // 2. 更新/同步整個資料結構
-  async updatePartnersData(data) {
-    if (API_CONFIG.useMockAPI) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      return { success: true };
-    } else {
-      // 🎯 [後端 API 接頭] PUT /partners
-      const res = await fetch(`${API_CONFIG.baseURL}/partners`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      return await res.json();
-    }
-  },
-
-  // 3. (選用) 單獨新增活動接口
+  // 2. [POST] 新增活動
   async addActivity(partnerId, activityText) {
+    if (API_CONFIG.useMockAPI) return { success: true };
+    return await this.postRequest('/partners/activities/add', {
+      partnerId,
+      activity: activityText
+    });
+  },
+
+  // 3. [POST] 刪除活動
+  async deleteActivity(partnerId, activityText) {
+    if (API_CONFIG.useMockAPI) return { success: true };
+    return await this.postRequest('/partners/activities/delete', {
+      partnerId,
+      activity: activityText
+    });
+  },
+
+  // 4. [POST] 切換意願勾選
+  async toggleSelection(partnerId, activityText, selected) {
+    if (API_CONFIG.useMockAPI) return { success: true };
+    return await this.postRequest('/partners/selection/toggle', {
+      partnerId,
+      activity: activityText,
+      selected
+    });
+  },
+
+  // 5. [POST] 全量同步/備份 (包含 Mock 回寫 LocalStorage)
+  async syncAllData(partners) {
+    const dataToSave = partners.map(p => ({
+      id: p.id,
+      activities: p.activities,
+      selected: p.selected
+    }));
+
     if (API_CONFIG.useMockAPI) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
       return { success: true };
     } else {
-      // 🎯 [後端 API 接頭] POST /partners/:id/activities
-      const res = await fetch(`${API_CONFIG.baseURL}/partners/${partnerId}/activities`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activity: activityText })
-      });
-      return await res.json();
+      return await this.postRequest('/partners/sync', { partners: dataToSave });
     }
   }
 };
@@ -306,7 +331,7 @@ const PartnerCard = {
         <li v-if="!partner.activities.length" class="empty">還沒有活動，先新增一個吧 💕</li>
         <li v-else v-for="(item, idx) in partner.activities" :key="idx" class="list-item">
           <span class="activity-text">{{ item }}</span>
-          <button class="delete-btn" type="button" @click="$emit('delete-activity', partner.id, idx)">🗑 刪除</button>
+          <button class="delete-btn" type="button" @click="$emit('delete-activity', partner.id, item)">🗑 刪除</button>
         </li>
       </ul>
     </div>
@@ -328,7 +353,7 @@ createApp({
     const partners = ref([
       {
         id: 'male',
-        title: 'Javky',
+        title: 'Jacky',
         icon: '👨',
         cssClass: 'male',
         placeholder: '例如：看電影',
@@ -388,17 +413,7 @@ createApp({
       };
     };
 
-    // 統一資料同步方法
-    const syncDataToBackend = async () => {
-      const dataToSave = partners.value.map(p => ({
-        id: p.id,
-        activities: p.activities,
-        selected: p.selected
-      }));
-      await apiService.updatePartnersData(dataToSave);
-    };
-
-    // 新增與刪除邏輯 (改為 async)
+    // 新增活動 [POST]
     const addActivity = async (partnerId, text) => {
       const partner = partners.value.find(p => p.id === partnerId);
       if (partner.activities.includes(text)) {
@@ -406,33 +421,44 @@ createApp({
         return;
       }
       partner.activities.push(text);
-      await syncDataToBackend();
+
+      await apiService.addActivity(partnerId, text);
+      await apiService.syncAllData(partners.value);
     };
 
-    const deleteActivity = async (partnerId, index) => {
+    // 刪除活動 [POST]
+    const deleteActivity = async (partnerId, text) => {
       const partner = partners.value.find(p => p.id === partnerId);
-      const item = partner.activities[index];
-      partner.activities.splice(index, 1);
+      const idx = partner.activities.indexOf(text);
+      if (idx > -1) partner.activities.splice(idx, 1);
       
-      // 連帶清理勾選項目
+      // 清理勾選項目
       partners.value.forEach(p => {
-        p.selected = p.selected.filter(x => x !== item);
+        p.selected = p.selected.filter(x => x !== text);
       });
-      await syncDataToBackend();
+
+      await apiService.deleteActivity(partnerId, text);
+      await apiService.syncAllData(partners.value);
     };
 
-    // 切換勾選狀態
-    const toggleSelection = async (partnerId, item) => {
+    // 切換勾選狀態 [POST]
+    const toggleSelection = async (partnerId, text) => {
       const partner = partners.value.find(p => p.id === partnerId);
       if (!partner) return;
 
-      const idx = partner.selected.indexOf(item);
+      const idx = partner.selected.indexOf(text);
+      let isSelected = false;
+
       if (idx > -1) {
         partner.selected.splice(idx, 1);
+        isSelected = false;
       } else {
-        partner.selected.push(item);
+        partner.selected.push(text);
+        isSelected = true;
       }
-      await syncDataToBackend();
+
+      await apiService.toggleSelection(partnerId, text, isSelected);
+      await apiService.syncAllData(partners.value);
     };
 
     // 尋找共同點
@@ -493,7 +519,7 @@ createApp({
       }
     };
 
-    // 初始化讀取資料 (改為 async)
+    // 初始化讀取資料 [POST]
     const loadData = async () => {
       loading.value = true;
       try {
