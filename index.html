@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#ff4d6d">
-<title>💕 Love Pick 共識轉盤</title>
+<title>💕 Dating  Pick 共識轉盤 (Vue 3 版)</title>
+<!-- 載入 Vue 3 -->
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -131,375 +133,410 @@ button{border:0}
   .buttons{gap:6px}
   .action-btn{flex:1 1 42%;padding:11px 10px}
 }
-@media(prefers-reduced-motion:reduce){
-  html{scroll-behavior:auto}
-  .wheel{transition:none}
-  .winner-title{animation:none}
-}
 </style>
 </head>
 <body>
 
-<header class="hero">
-  <h1>💕  Pick</h1>
-  <p>兩個人的選擇，交給命運決定</p>
-</header>
+<div id="app">
+  <header class="hero">
+    <h1>💕 Dating Pick</h1>
+    <p>兩個人的選擇，交給命運決定</p>
+  </header>
 
-<main class="container">
-  <section class="couple-section">
-    <div class="card male">
-      <h2>👨boy想做的事</h2>
-      <div class="input-group">
-        <input id="maleInput" maxlength="40" placeholder="例如：看電影" autocomplete="off">
-        <button class="primary-btn" id="maleAddBtn" type="button">新增</button>
+  <main class="container">
+    <!-- 1. 新增活動區塊 -->
+    <section class="couple-section">
+      <partner-card
+        v-for="partner in partners"
+        :key="partner.id"
+        :partner="partner"
+        @add-activity="addActivity"
+        @delete-activity="deleteActivity">
+      </partner-card>
+    </section>
+
+    <!-- 2. 雙方意願選擇區塊 -->
+    <section class="card choice-card">
+      <h2>💗 雙方意願選擇</h2>
+      <div class="choice-container">
+        <div class="choice-box" v-for="partner in partners" :key="'choice-'+partner.id">
+          <h3>{{ partner.icon }} {{ partner.title }}願意</h3>
+          <div class="choice-list">
+            <div v-if="!allActivities.length" class="empty">先新增一些活動</div>
+            <label v-else v-for="item in allActivities" :key="item" class="choice-label">
+              <input type="checkbox" :value="item" :checked="partner.selected.includes(item)" @change="toggleSelection(partner.id, item)">
+              <span>{{ item }}</span>
+            </label>
+          </div>
+        </div>
       </div>
-      <ul id="maleList" class="activity-list"></ul>
-    </div>
-
-    <div class="card female">
-      <h2>👩 girl想做的事</h2>
-      <div class="input-group">
-        <input id="femaleInput" maxlength="40" placeholder="例如：吃甜點" autocomplete="off">
-        <button class="primary-btn" id="femaleAddBtn" type="button">新增</button>
+      <div class="common-summary">
+        {{ commonActivities.length ? `💕 目前有 ${commonActivities.length} 個共同意願：${commonActivities.join('、')}` : '目前有 0 個共同意願' }}
       </div>
-      <ul id="femaleList" class="activity-list"></ul>
-    </div>
-  </section>
+    </section>
 
-  <section class="card choice-card">
-    <h2>💗 雙方意願選擇</h2>
-    <div class="choice-container">
-      <div class="choice-box">
-        <h3>👨 boy願意</h3>
-        <div id="maleChoice" class="choice-list"></div>
+    <!-- 3. 轉盤區域 -->
+    <section class="wheel-area">
+      <h2>🎡 共識轉盤</h2>
+      <div class="wheel-container">
+        <div class="pointer" aria-hidden="true"></div>
+        <div class="wheel" :style="wheelStyle">
+          <div 
+            v-for="(item, index) in currentWheelItems" 
+            :key="index" 
+            class="segment-label"
+            :style="getSegmentStyle(index)">
+            {{ item }}
+          </div>
+        </div>
+        <div class="wheel-center">💕</div>
       </div>
-      <div class="choice-box">
-        <h3>👩 girl願意</h3>
-        <div id="femaleChoice" class="choice-list"></div>
+
+      <div class="buttons">
+        <button class="action-btn primary" :disabled="spinning || loading" @click="findMatch">💕 找共同意願</button>
+        <button class="action-btn yellow" :disabled="spinning || loading" @click="spin(commonActivities, '共識')">🎯 共識轉盤</button>
+        <button class="action-btn" :disabled="spinning || loading" @click="spin(allActivities, '全部')">🎲 全部轉盤</button>
+        <button v-for="partner in partners" :key="'spin-'+partner.id" class="action-btn" :disabled="spinning || loading" @click="spin(partner.activities, partner.title)">
+          {{ partner.icon }} {{ partner.title }}轉盤
+        </button>
       </div>
-    </div>
-    <div id="commonSummary" class="common-summary">目前有 0 個共同意願</div>
-  </section>
 
-  <section class="wheel-area">
-    <h2>🎡 共識轉盤</h2>
-    <div class="wheel-container">
-      <div class="pointer" aria-hidden="true"></div>
-      <div id="wheel" class="wheel" aria-label="活動轉盤"></div>
-      <div class="wheel-center">💕</div>
-    </div>
+      <div class="result" role="status">
+        <div v-if="loading" class="status">⏳ 資料同步中...</div>
+        <template v-else>
+          <div v-if="resultState.type === 'status'" class="status">{{ resultState.msg }}</div>
+          <div v-else-if="resultState.type === 'match'">
+            <div>💕 雙方都願意</div>
+            <div class="winner-item">{{ resultState.msg }}</div>
+          </div>
+          <div v-else-if="resultState.type === 'winner'">
+            <div class="winner-title">🎉 恭喜抽中 🎉</div>
+            <div class="winner-item">💕 {{ resultState.winner }}</div>
+            <div class="status">今天就去做這件事吧！</div>
+          </div>
+          <div v-else>{{ resultState.msg }}</div>
+        </template>
+      </div>
+    </section>
+  </main>
 
-    <div class="buttons">
-      <button class="action-btn primary" id="matchBtn" type="button">💕 找共同意願</button>
-      <button class="action-btn yellow" id="commonSpinBtn" type="button">🎯 共識轉盤</button>
-      <button class="action-btn" id="allSpinBtn" type="button">🎲 全部轉盤</button>
-      <button class="action-btn" id="maleSpinBtn" type="button">👨 boy轉盤</button>
-      <button class="action-btn" id="femaleSpinBtn" type="button">👩 girl轉盤</button>
-    </div>
-
-    <div id="result" class="result" role="status" aria-live="polite"></div>
-  </section>
-</main>
-
-<footer class="footer">💕  Pick · 2026</footer>
+  <footer class="footer">💕 Dating Pick · 2026</footer>
+</div>
 
 <script>
-"use strict";
+const { createApp, ref, computed, onMounted } = Vue;
 
-const STORAGE_KEY = "lovePickDataV2";
-const colors = ["#FF6B6B","#FFD93D","#6BCB77","#4D96FF","#B983FF","#FF8FAB","#00C2A8","#FF9F1C"];
+const STORAGE_KEY = "lovePickDataV3";
+const COLORS = ["#FF6B6B","#FFD93D","#6BCB77","#4D96FF","#B983FF","#FF8FAB","#00C2A8","#FF9F1C"];
 
-let maleActivities = [];
-let femaleActivities = [];
-let maleSelected = [];
-let femaleSelected = [];
-let currentRotation = 0;
-let spinning = false;
+/* 
+  ======================================================
+  🔌 API 服務封裝層 (API Service Layer)
+  ======================================================
+  - 當 useMockAPI = true 時，使用 LocalStorage 模擬後端非同步操作
+  - 當後端 API 好了，只需將 useMockAPI 改為 false，並在對應方法填入 fetch/axios 即可
+*/
+const API_CONFIG = {
+  useMockAPI: true, // 👈 待後端上線後改為 false
+  baseURL: 'https://api.yourdomain.com/v1' // 後端 API 根網址
+};
 
-const $ = id => document.getElementById(id);
-const maleInput = $("maleInput");
-const femaleInput = $("femaleInput");
-const maleList = $("maleList");
-const femaleList = $("femaleList");
-const maleChoice = $("maleChoice");
-const femaleChoice = $("femaleChoice");
-const commonSummary = $("commonSummary");
-const wheel = $("wheel");
-const result = $("result");
+const apiService = {
+  // 1. 取得所有資料
+  async fetchPartnersData() {
+    if (API_CONFIG.useMockAPI) {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } else {
+      // 🎯 [後端 API 接頭] GET /partners
+      const res = await fetch(`${API_CONFIG.baseURL}/partners`);
+      return await res.json();
+    }
+  },
 
-function unique(arr){
-  return [...new Set(arr.map(v => String(v).trim()).filter(Boolean))];
-}
+  // 2. 更新/同步整個資料結構
+  async updatePartnersData(data) {
+    if (API_CONFIG.useMockAPI) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      return { success: true };
+    } else {
+      // 🎯 [後端 API 接頭] PUT /partners
+      const res = await fetch(`${API_CONFIG.baseURL}/partners`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await res.json();
+    }
+  },
 
-function saveData(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    maleActivities, femaleActivities, maleSelected, femaleSelected
-  }));
-}
-
-function loadData(){
-  try{
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    maleActivities = unique(Array.isArray(data.maleActivities) ? data.maleActivities : []);
-    femaleActivities = unique(Array.isArray(data.femaleActivities) ? data.femaleActivities : []);
-    const all = new Set([...maleActivities,...femaleActivities]);
-    maleSelected = unique(Array.isArray(data.maleSelected) ? data.maleSelected : []).filter(x=>all.has(x));
-    femaleSelected = unique(Array.isArray(data.femaleSelected) ? data.femaleSelected : []).filter(x=>all.has(x));
-  }catch{
-    maleActivities=[]; femaleActivities=[]; maleSelected=[]; femaleSelected=[];
+  // 3. (選用) 單獨新增活動接口
+  async addActivity(partnerId, activityText) {
+    if (API_CONFIG.useMockAPI) {
+      return { success: true };
+    } else {
+      // 🎯 [後端 API 接頭] POST /partners/:id/activities
+      const res = await fetch(`${API_CONFIG.baseURL}/partners/${partnerId}/activities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activity: activityText })
+      });
+      return await res.json();
+    }
   }
-}
+};
 
-function addActivity(type){
-  const input = type === "male" ? maleInput : femaleInput;
-  const value = input.value.trim();
-  if(!value) return;
-
-  const list = type === "male" ? maleActivities : femaleActivities;
-  if(list.includes(value)){
-    result.textContent = "這個活動已經存在囉 💕";
-    input.focus();
-    return;
+// 子元件：伴侶卡片
+const PartnerCard = {
+  props: ['partner'],
+  emits: ['add-activity', 'delete-activity'],
+  template: `
+    <div :class="['card', partner.cssClass]">
+      <h2>{{ partner.icon }} {{ partner.title }}想做的事</h2>
+      <div class="input-group">
+        <input 
+          v-model.trim="inputText" 
+          maxlength="40" 
+          :placeholder="partner.placeholder" 
+          @keyup.enter="handleAdd"
+          autocomplete="off">
+        <button class="primary-btn" type="button" @click="handleAdd">新增</button>
+      </div>
+      <ul class="activity-list">
+        <li v-if="!partner.activities.length" class="empty">還沒有活動，先新增一個吧 💕</li>
+        <li v-else v-for="(item, idx) in partner.activities" :key="idx" class="list-item">
+          <span class="activity-text">{{ item }}</span>
+          <button class="delete-btn" type="button" @click="$emit('delete-activity', partner.id, idx)">🗑 刪除</button>
+        </li>
+      </ul>
+    </div>
+  `,
+  setup(props, { emit }) {
+    const inputText = ref('');
+    const handleAdd = () => {
+      if (!inputText.value) return;
+      emit('add-activity', props.partner.id, inputText.value);
+      inputText.value = '';
+    };
+    return { inputText, handleAdd };
   }
+};
 
-  list.push(value);
-  input.value = "";
-  saveData();
-  renderAll();
-  input.focus();
-}
-
-function deleteActivity(type,index){
-  const list = type === "male" ? maleActivities : femaleActivities;
-  const item = list[index];
-  list.splice(index,1);
-  maleSelected = maleSelected.filter(x=>x!==item);
-  femaleSelected = femaleSelected.filter(x=>x!==item);
-  saveData();
-  renderAll();
-}
-
-function getAllActivities(){
-  return unique([...maleActivities,...femaleActivities]);
-}
-
-function getCommonActivities(){
-  return maleSelected.filter(x => femaleSelected.includes(x));
-}
-
-function renderList(){
-  renderActivityList(maleList,maleActivities,"male");
-  renderActivityList(femaleList,femaleActivities,"female");
-}
-
-function renderActivityList(container,list,type){
-  container.innerHTML = "";
-  if(!list.length){
-    const li=document.createElement("li");
-    li.className="empty";
-    li.textContent="還沒有活動，先新增一個吧 💕";
-    container.appendChild(li);
-    return;
-  }
-
-  list.forEach((item,index)=>{
-    const li=document.createElement("li");
-    li.className="list-item";
-
-    const span=document.createElement("span");
-    span.className="activity-text";
-    span.textContent=item;
-
-    const btn=document.createElement("button");
-    btn.className="delete-btn";
-    btn.type="button";
-    btn.textContent="🗑 刪除";
-    btn.addEventListener("click",()=>deleteActivity(type,index));
-
-    li.append(span,btn);
-    container.appendChild(li);
-  });
-}
-
-function renderChoices(){
-  const activities=getAllActivities();
-  renderChoiceList(maleChoice,activities,maleSelected,"male");
-  renderChoiceList(femaleChoice,activities,femaleSelected,"female");
-
-  const common=getCommonActivities();
-  commonSummary.textContent = common.length
-    ? `💕 目前有 ${common.length} 個共同意願：${common.join("、")}`
-    : "目前有 0 個共同意願";
-}
-
-function renderChoiceList(container,activities,selected,type){
-  container.innerHTML="";
-  if(!activities.length){
-    const div=document.createElement("div");
-    div.className="empty";
-    div.textContent="先新增一些活動";
-    container.appendChild(div);
-    return;
-  }
-
-  activities.forEach(item=>{
-    const label=document.createElement("label");
-    label.className="choice-label";
-
-    const checkbox=document.createElement("input");
-    checkbox.type="checkbox";
-    checkbox.checked=selected.includes(item);
-    checkbox.dataset.activity=item;
-
-    checkbox.addEventListener("change",()=>{
-      const target = type === "male" ? maleSelected : femaleSelected;
-      if(checkbox.checked){
-        if(!target.includes(item)) target.push(item);
-      }else{
-        const index=target.indexOf(item);
-        if(index>=0) target.splice(index,1);
+createApp({
+  components: { PartnerCard },
+  setup() {
+    const partners = ref([
+      {
+        id: 'male',
+        title: 'Javky',
+        icon: '👨',
+        cssClass: 'male',
+        placeholder: '例如：看電影',
+        activities: [],
+        selected: []
+      },
+      {
+        id: 'female',
+        title: '紫紫',
+        icon: '👩',
+        cssClass: 'female',
+        placeholder: '例如：吃甜點',
+        activities: [],
+        selected: []
       }
-      saveData();
-      renderChoices();
-      generateWheel();
+    ]);
+
+    const loading = ref(false);
+    const spinning = ref(false);
+    const currentRotation = ref(0);
+    const currentWheelItems = ref([]);
+    const resultState = ref({ type: 'normal', msg: '' });
+
+    // 計算屬性：所有活動 (去重)
+    const allActivities = computed(() => {
+      const all = partners.value.flatMap(p => p.activities);
+      return [...new Set(all)];
     });
 
-    const text=document.createElement("span");
-    text.textContent=item;
-    label.append(checkbox,text);
-    container.appendChild(label);
-  });
-}
+    // 計算屬性：共同選擇
+    const commonActivities = computed(() => {
+      if (partners.value.length < 2) return [];
+      const maleSel = partners.value[0].selected;
+      const femaleSel = partners.value[1].selected;
+      return maleSel.filter(x => femaleSel.includes(x));
+    });
 
-function renderAll(){
-  renderList();
-  renderChoices();
-  generateWheel();
-}
+    // 輪播背景與轉速控制
+    const wheelStyle = computed(() => {
+      const items = currentWheelItems.value;
+      if (!items.length) return { background: '#ddd', transform: `rotate(${currentRotation.value}deg)` };
 
-function generateWheel(items=getCommonActivities()){
-  wheel.innerHTML="";
-  if(!items.length){
-    wheel.style.background="#ddd";
-    return;
+      const angle = 360 / items.length;
+      const gradients = items.map((_, i) => `${COLORS[i % COLORS.length]} ${i * angle}deg ${(i + 1) * angle}deg`);
+      
+      return {
+        background: `conic-gradient(${gradients.join(',')})`,
+        transform: `rotate(${currentRotation.value}deg)`
+      };
+    });
+
+    const getSegmentStyle = (index) => {
+      const total = currentWheelItems.value.length;
+      const angle = 360 / total;
+      return {
+        transform: `rotate(${index * angle + angle / 2}deg) translate(130px) rotate(90deg)`
+      };
+    };
+
+    // 統一資料同步方法
+    const syncDataToBackend = async () => {
+      const dataToSave = partners.value.map(p => ({
+        id: p.id,
+        activities: p.activities,
+        selected: p.selected
+      }));
+      await apiService.updatePartnersData(dataToSave);
+    };
+
+    // 新增與刪除邏輯 (改為 async)
+    const addActivity = async (partnerId, text) => {
+      const partner = partners.value.find(p => p.id === partnerId);
+      if (partner.activities.includes(text)) {
+        resultState.value = { type: 'normal', msg: '這個活動已經存在囉 💕' };
+        return;
+      }
+      partner.activities.push(text);
+      await syncDataToBackend();
+    };
+
+    const deleteActivity = async (partnerId, index) => {
+      const partner = partners.value.find(p => p.id === partnerId);
+      const item = partner.activities[index];
+      partner.activities.splice(index, 1);
+      
+      // 連帶清理勾選項目
+      partners.value.forEach(p => {
+        p.selected = p.selected.filter(x => x !== item);
+      });
+      await syncDataToBackend();
+    };
+
+    // 切換勾選狀態
+    const toggleSelection = async (partnerId, item) => {
+      const partner = partners.value.find(p => p.id === partnerId);
+      if (!partner) return;
+
+      const idx = partner.selected.indexOf(item);
+      if (idx > -1) {
+        partner.selected.splice(idx, 1);
+      } else {
+        partner.selected.push(item);
+      }
+      await syncDataToBackend();
+    };
+
+    // 尋找共同點
+    const findMatch = () => {
+      if (!commonActivities.value.length) {
+        resultState.value = { type: 'normal', msg: '目前沒有共同意願 💭' };
+        return;
+      }
+      resultState.value = { type: 'match', msg: commonActivities.value.join('、') };
+    };
+
+    // 旋轉轉盤
+    const spin = (items, modeName) => {
+      if (spinning.value) return;
+
+      const uniqueItems = [...new Set(items)];
+      if (!uniqueItems.length) {
+        resultState.value = {
+          type: 'normal',
+          msg: modeName === '共識' ? '目前沒有共同意願，先勾選雙方都願意的活動 💕' : '沒有可抽選的項目，先新增活動吧 💕'
+        };
+        return;
+      }
+
+      spinning.value = true;
+      currentWheelItems.value = uniqueItems;
+
+      const selectedIndex = Math.floor(Math.random() * uniqueItems.length);
+      const selectedItem = uniqueItems[selectedIndex];
+      const segmentAngle = 360 / uniqueItems.length;
+
+      const target = 360 - (selectedIndex * segmentAngle + segmentAngle / 2);
+      const normalizedCurrent = ((currentRotation.value % 360) + 360) % 360;
+      const delta = (target - normalizedCurrent + 360) % 360;
+
+      currentRotation.value += 360 * 5 + delta;
+      resultState.value = { type: 'status', msg: `🎡 ${modeName}轉盤旋轉中...` };
+
+      setTimeout(() => {
+        spinning.value = false;
+        launchConfetti();
+        resultState.value = { type: 'winner', winner: selectedItem };
+      }, 5000);
+    };
+
+    const launchConfetti = () => {
+      const confettiColors = ["#FF4D6D","#FFD166","#6BCB77","#6EC1FF","#B983FF","#FF8FAB"];
+      for (let i = 0; i < 100; i++) {
+        const c = document.createElement("div");
+        c.className = "confetti";
+        c.style.left = Math.random() * window.innerWidth + "px";
+        c.style.width = 5 + Math.random() * 8 + "px";
+        c.style.height = 6 + Math.random() * 12 + "px";
+        c.style.background = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+        c.style.animationDuration = 2 + Math.random() * 2 + "s";
+        document.body.appendChild(c);
+        setTimeout(() => c.remove(), 4000);
+      }
+    };
+
+    // 初始化讀取資料 (改為 async)
+    const loadData = async () => {
+      loading.value = true;
+      try {
+        const savedData = await apiService.fetchPartnersData();
+        if (savedData && Array.isArray(savedData)) {
+          savedData.forEach(sData => {
+            const partner = partners.value.find(p => p.id === sData.id);
+            if (partner) {
+              partner.activities = Array.isArray(sData.activities) ? sData.activities : [];
+              partner.selected = Array.isArray(sData.selected) ? sData.selected : [];
+            }
+          });
+        }
+      } catch (e) {
+        console.error("載入資料失敗:", e);
+      } finally {
+        loading.value = false;
+        currentWheelItems.value = commonActivities.value;
+      }
+    };
+
+    onMounted(() => {
+      loadData();
+    });
+
+    return {
+      partners,
+      loading,
+      spinning,
+      allActivities,
+      commonActivities,
+      currentWheelItems,
+      wheelStyle,
+      resultState,
+      getSegmentStyle,
+      addActivity,
+      deleteActivity,
+      toggleSelection,
+      findMatch,
+      spin
+    };
   }
-
-  const angle=360/items.length;
-  const gradients=items.map((item,index)=>{
-    const start=index*angle;
-    return `${colors[index%colors.length]} ${start}deg ${start+angle}deg`;
-  });
-
-  items.forEach((item,index)=>{
-    const label=document.createElement("div");
-    label.className="segment-label";
-    label.textContent=item;
-    label.title=item;
-    label.style.transform =
-      `rotate(${index*angle+angle/2}deg) translate(${Math.min(145, wheel.clientWidth*.33)}px) rotate(90deg)`;
-    wheel.appendChild(label);
-  });
-
-  wheel.style.background=`conic-gradient(${gradients.join(",")})`;
-}
-
-function spin(items, modeName){
-  if(spinning) return;
-
-  items=unique(items);
-  if(!items.length){
-    result.textContent = modeName === "共識"
-      ? "目前沒有共同意願，先勾選雙方都願意的活動 💕"
-      : "沒有可抽選的項目，先新增活動吧 💕";
-    return;
-  }
-
-  spinning=true;
-  setButtonsDisabled(true);
-  generateWheel(items);
-
-  const selectedIndex=Math.floor(Math.random()*items.length);
-  const selectedItem=items[selectedIndex];
-  const segmentAngle=360/items.length;
-
-  // 指針位於 0deg 頂端，將目標區段中心轉到指針位置
-  const target = 360 - (selectedIndex*segmentAngle + segmentAngle/2);
-  const normalizedCurrent=((currentRotation%360)+360)%360;
-  const delta=(target-normalizedCurrent+360)%360;
-
-  currentRotation += 360*5 + delta;
-  wheel.style.transform=`rotate(${currentRotation}deg)`;
-
-  result.innerHTML=`<div class="status">🎡 ${modeName}轉盤旋轉中...</div>`;
-
-  setTimeout(()=>{
-    spinning=false;
-    setButtonsDisabled(false);
-    launchConfetti();
-    result.innerHTML=`
-      <div class="winner-title">🎉 恭喜抽中 🎉</div>
-      <div class="winner-item">💕 ${escapeHtml(selectedItem)}</div>
-      <div class="status">今天就去做這件事吧！</div>
-    `;
-  },5000);
-}
-
-function escapeHtml(value){
-  const div=document.createElement("div");
-  div.textContent=value;
-  return div.innerHTML;
-}
-
-function findMatch(){
-  const common=getCommonActivities();
-  if(!common.length){
-    result.textContent="目前沒有共同意願 💭";
-    return;
-  }
-  result.innerHTML=`<div>💕 雙方都願意</div><div class="winner-item">${common.map(escapeHtml).join("、")}</div>`;
-}
-
-function setButtonsDisabled(disabled){
-  document.querySelectorAll(".action-btn").forEach(btn=>btn.disabled=disabled);
-}
-
-function launchConfetti(){
-  const confettiColors=["#FF4D6D","#FFD166","#6BCB77","#6EC1FF","#B983FF","#FF8FAB"];
-  for(let i=0;i<120;i++){
-    const c=document.createElement("div");
-    c.className="confetti";
-    c.style.left=Math.random()*window.innerWidth+"px";
-    c.style.width=5+Math.random()*8+"px";
-    c.style.height=6+Math.random()*12+"px";
-    c.style.background=confettiColors[Math.floor(Math.random()*confettiColors.length)];
-    c.style.animationDuration=2+Math.random()*2+"s";
-    document.body.appendChild(c);
-    setTimeout(()=>c.remove(),4500);
-  }
-}
-
-$("maleAddBtn").addEventListener("click",()=>addActivity("male"));
-$("femaleAddBtn").addEventListener("click",()=>addActivity("female"));
-
-maleInput.addEventListener("keydown",e=>{
-  if(e.key==="Enter") addActivity("male");
-});
-femaleInput.addEventListener("keydown",e=>{
-  if(e.key==="Enter") addActivity("female");
-});
-
-$("matchBtn").addEventListener("click",findMatch);
-$("commonSpinBtn").addEventListener("click",()=>spin(getCommonActivities(),"共識"));
-$("allSpinBtn").addEventListener("click",()=>spin(getAllActivities(),"全部"));
-$("maleSpinBtn").addEventListener("click",()=>spin(maleActivities,"男友"));
-$("femaleSpinBtn").addEventListener("click",()=>spin(femaleActivities,"女友"));
-
-window.addEventListener("resize",()=>{
-  if(!spinning) generateWheel();
-});
-
-loadData();
-renderAll();
+}).mount('#app');
 </script>
 </body>
 </html>
