@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ff4d6d">
+<title>💕 Love Pick 共識轉盤</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --pink:#ff4d6d;--pink2:#ff8fab;--blue:#5aaeff;--yellow:#ffd166;
+  --green:#6bcb77;--purple:#b983ff;--text:#333;--muted:#777;
+  --card:rgba(255,255,255,.94);
+}
+html{scroll-behavior:smooth}
+body{
+  min-height:100vh;color:var(--text);
+  font-family:"Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;
+  background:linear-gradient(135deg,#ffe5ec 0%,#fff1f5 45%,#fff 100%);
+}
+button,input{font:inherit}
+button{border:0}
+.hero{text-align:center;padding:42px 20px 24px}
+.hero h1{font-size:clamp(2.2rem,6vw,3.5rem);color:var(--pink);line-height:1.1}
+.hero p{margin-top:12px;color:var(--muted);font-size:1rem}
+.container{width:min(1200px,100%);margin:auto;padding:20px}
+.couple-section{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.card{
+  background:var(--card);border-radius:22px;padding:22px;
+  box-shadow:0 10px 30px rgba(0,0,0,.09);
+  border:1px solid rgba(255,255,255,.8);
+}
+.male{border-top:6px solid var(--blue)}
+.female{border-top:6px solid var(--pink2)}
+.card h2{margin-bottom:16px}
+.input-group{display:flex;gap:10px}
+.input-group input{
+  min-width:0;flex:1;padding:12px 14px;border:1px solid #ddd;
+  border-radius:12px;outline:none;background:#fff;
+}
+.input-group input:focus{border-color:var(--pink);box-shadow:0 0 0 3px rgba(255,77,109,.1)}
+.primary-btn{
+  background:var(--pink);color:#fff;padding:12px 16px;border-radius:12px;
+  cursor:pointer;font-weight:700;white-space:nowrap
+}
+.primary-btn:hover{filter:brightness(.96)}
+.activity-list{list-style:none;margin-top:16px;display:grid;gap:8px}
+.list-item{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:#f7f7f8;padding:10px 12px;border-radius:12px
+}
+.activity-text{overflow-wrap:anywhere}
+.delete-btn{
+  flex:none;background:#ffe1e7;color:#d92e50;padding:7px 10px;
+  border-radius:9px;cursor:pointer
+}
+.choice-card{margin-top:20px}
+.choice-container{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:30px}
+.choice-box h3{margin-bottom:10px}
+.choice-list{display:grid;gap:7px}
+.choice-label{
+  display:flex;align-items:center;gap:9px;padding:9px 10px;
+  border-radius:10px;background:#f7f7f8;cursor:pointer
+}
+.choice-label:hover{background:#f0f0f2}
+.choice-label input{width:18px;height:18px;accent-color:var(--pink)}
+.common-summary{
+  margin-top:18px;padding:14px 16px;border-radius:14px;
+  background:#fff3f6;text-align:center;color:#c92f50;font-weight:700
+}
+.wheel-area{text-align:center;margin-top:38px}
+.wheel-container{
+  position:relative;width:min(430px,88vw);aspect-ratio:1;margin:25px auto 0
+}
+.pointer{
+  position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+  width:0;height:0;border-left:22px solid transparent;
+  border-right:22px solid transparent;border-top:50px solid var(--pink);
+  filter:drop-shadow(0 3px 2px rgba(0,0,0,.18));z-index:10
+}
+.wheel{
+  width:100%;height:100%;border-radius:50%;overflow:hidden;
+  border:9px solid white;box-shadow:0 14px 35px rgba(0,0,0,.18);
+  transition:transform 5s cubic-bezier(.17,.67,.12,.99);
+  position:relative;background:#ddd
+}
+.segment-label{
+  position:absolute;left:50%;top:50%;transform-origin:left center;
+  color:#fff;font-size:clamp(10px,2.6vw,14px);font-weight:800;
+  white-space:nowrap;text-shadow:1px 1px 3px rgba(0,0,0,.5);
+  max-width:42%;overflow:hidden;text-overflow:ellipsis
+}
+.wheel-center{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:74px;height:74px;border-radius:50%;background:#fff;
+  border:7px solid #ffd8e0;z-index:5;display:grid;place-items:center;
+  font-size:28px;box-shadow:0 4px 15px rgba(0,0,0,.15)
+}
+.buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:24px}
+.action-btn{
+  padding:12px 16px;border-radius:12px;cursor:pointer;font-weight:700;
+  background:#ffe8ee;color:#b92748
+}
+.action-btn.primary{background:var(--pink);color:#fff}
+.action-btn.yellow{background:var(--yellow);color:#5f4a00}
+.action-btn:disabled{opacity:.5;cursor:not-allowed}
+.result{
+  min-height:48px;margin-top:24px;font-size:22px;font-weight:800;color:var(--pink)
+}
+.winner-title{font-size:32px;animation:pulse 1s infinite}
+.winner-item{font-size:clamp(28px,7vw,44px);margin-top:10px;overflow-wrap:anywhere}
+.status{font-size:15px;color:var(--muted);margin-top:6px}
+.footer{text-align:center;padding:35px 20px;color:#888}
+.empty{padding:14px;color:#999;text-align:center;background:#fafafa;border-radius:12px}
+.confetti{
+  position:fixed;top:-20px;z-index:9999;pointer-events:none;
+  animation:fall linear forwards;border-radius:2px
+}
+@keyframes fall{
+  from{transform:translateY(0) rotate(0deg);opacity:1}
+  to{transform:translateY(110vh) rotate(720deg);opacity:0}
+}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@media(max-width:760px){
+  .hero{padding-top:30px}
+  .container{padding:14px}
+  .couple-section,.choice-container{grid-template-columns:1fr}
+  .card{padding:18px}
+  .input-group{flex-direction:column}
+  .primary-btn{width:100%}
+  .buttons{gap:6px}
+  .action-btn{flex:1 1 42%;padding:11px 10px}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .wheel{transition:none}
+  .winner-title{animation:none}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>💕  Pick</h1>
+  <p>兩個人的選擇，交給命運決定</p>
+</header>
+
+<main class="container">
+  <section class="couple-section">
+    <div class="card male">
+      <h2>👨boy想做的事</h2>
+      <div class="input-group">
+        <input id="maleInput" maxlength="40" placeholder="例如：看電影" autocomplete="off">
+        <button class="primary-btn" id="maleAddBtn" type="button">新增</button>
+      </div>
+      <ul id="maleList" class="activity-list"></ul>
+    </div>
+
+    <div class="card female">
+      <h2>👩 girl想做的事</h2>
+      <div class="input-group">
+        <input id="femaleInput" maxlength="40" placeholder="例如：吃甜點" autocomplete="off">
+        <button class="primary-btn" id="femaleAddBtn" type="button">新增</button>
+      </div>
+      <ul id="femaleList" class="activity-list"></ul>
+    </div>
+  </section>
+
+  <section class="card choice-card">
+    <h2>💗 雙方意願選擇</h2>
+    <div class="choice-container">
+      <div class="choice-box">
+        <h3>👨 boy願意</h3>
+        <div id="maleChoice" class="choice-list"></div>
+      </div>
+      <div class="choice-box">
+        <h3>👩 girl願意</h3>
+        <div id="femaleChoice" class="choice-list"></div>
+      </div>
+    </div>
+    <div id="commonSummary" class="common-summary">目前有 0 個共同意願</div>
+  </section>
+
+  <section class="wheel-area">
+    <h2>🎡 共識轉盤</h2>
+    <div class="wheel-container">
+      <div class="pointer" aria-hidden="true"></div>
+      <div id="wheel" class="wheel" aria-label="活動轉盤"></div>
+      <div class="wheel-center">💕</div>
+    </div>
+
+    <div class="buttons">
+      <button class="action-btn primary" id="matchBtn" type="button">💕 找共同意願</button>
+      <button class="action-btn yellow" id="commonSpinBtn" type="button">🎯 共識轉盤</button>
+      <button class="action-btn" id="allSpinBtn" type="button">🎲 全部轉盤</button>
+      <button class="action-btn" id="maleSpinBtn" type="button">👨 boy轉盤</button>
+      <button class="action-btn" id="femaleSpinBtn" type="button">👩 girl轉盤</button>
+    </div>
+
+    <div id="result" class="result" role="status" aria-live="polite"></div>
+  </section>
+</main>
+
+<footer class="footer">💕  Pick · 2026</footer>
+
+<script>
+"use strict";
+
+const STORAGE_KEY = "lovePickDataV2";
+const colors = ["#FF6B6B","#FFD93D","#6BCB77","#4D96FF","#B983FF","#FF8FAB","#00C2A8","#FF9F1C"];
+
+let maleActivities = [];
+let femaleActivities = [];
+let maleSelected = [];
+let femaleSelected = [];
+let currentRotation = 0;
+let spinning = false;
+
+const $ = id => document.getElementById(id);
+const maleInput = $("maleInput");
+const femaleInput = $("femaleInput");
+const maleList = $("maleList");
+const femaleList = $("femaleList");
+const maleChoice = $("maleChoice");
+const femaleChoice = $("femaleChoice");
+const commonSummary = $("commonSummary");
+const wheel = $("wheel");
+const result = $("result");
+
+function unique(arr){
+  return [...new Set(arr.map(v => String(v).trim()).filter(Boolean))];
+}
+
+function saveData(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    maleActivities, femaleActivities, maleSelected, femaleSelected
+  }));
+}
+
+function loadData(){
+  try{
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    maleActivities = unique(Array.isArray(data.maleActivities) ? data.maleActivities : []);
+    femaleActivities = unique(Array.isArray(data.femaleActivities) ? data.femaleActivities : []);
+    const all = new Set([...maleActivities,...femaleActivities]);
+    maleSelected = unique(Array.isArray(data.maleSelected) ? data.maleSelected : []).filter(x=>all.has(x));
+    femaleSelected = unique(Array.isArray(data.femaleSelected) ? data.femaleSelected : []).filter(x=>all.has(x));
+  }catch{
+    maleActivities=[]; femaleActivities=[]; maleSelected=[]; femaleSelected=[];
+  }
+}
+
+function addActivity(type){
+  const input = type === "male" ? maleInput : femaleInput;
+  const value = input.value.trim();
+  if(!value) return;
+
+  const list = type === "male" ? maleActivities : femaleActivities;
+  if(list.includes(value)){
+    result.textContent = "這個活動已經存在囉 💕";
+    input.focus();
+    return;
+  }
+
+  list.push(value);
+  input.value = "";
+  saveData();
+  renderAll();
+  input.focus();
+}
+
+function deleteActivity(type,index){
+  const list = type === "male" ? maleActivities : femaleActivities;
+  const item = list[index];
+  list.splice(index,1);
+  maleSelected = maleSelected.filter(x=>x!==item);
+  femaleSelected = femaleSelected.filter(x=>x!==item);
+  saveData();
+  renderAll();
+}
+
+function getAllActivities(){
+  return unique([...maleActivities,...femaleActivities]);
+}
+
+function getCommonActivities(){
+  return maleSelected.filter(x => femaleSelected.includes(x));
+}
+
+function renderList(){
+  renderActivityList(maleList,maleActivities,"male");
+  renderActivityList(femaleList,femaleActivities,"female");
+}
+
+function renderActivityList(container,list,type){
+  container.innerHTML = "";
+  if(!list.length){
+    const li=document.createElement("li");
+    li.className="empty";
+    li.textContent="還沒有活動，先新增一個吧 💕";
+    container.appendChild(li);
+    return;
+  }
+
+  list.forEach((item,index)=>{
+    const li=document.createElement("li");
+    li.className="list-item";
+
+    const span=document.createElement("span");
+    span.className="activity-text";
+    span.textContent=item;
+
+    const btn=document.createElement("button");
+    btn.className="delete-btn";
+    btn.type="button";
+    btn.textContent="🗑 刪除";
+    btn.addEventListener("click",()=>deleteActivity(type,index));
+
+    li.append(span,btn);
+    container.appendChild(li);
+  });
+}
+
+function renderChoices(){
+  const activities=getAllActivities();
+  renderChoiceList(maleChoice,activities,maleSelected,"male");
+  renderChoiceList(femaleChoice,activities,femaleSelected,"female");
+
+  const common=getCommonActivities();
+  commonSummary.textContent = common.length
+    ? `💕 目前有 ${common.length} 個共同意願：${common.join("、")}`
+    : "目前有 0 個共同意願";
+}
+
+function renderChoiceList(container,activities,selected,type){
+  container.innerHTML="";
+  if(!activities.length){
+    const div=document.createElement("div");
+    div.className="empty";
+    div.textContent="先新增一些活動";
+    container.appendChild(div);
+    return;
+  }
+
+  activities.forEach(item=>{
+    const label=document.createElement("label");
+    label.className="choice-label";
+
+    const checkbox=document.createElement("input");
+    checkbox.type="checkbox";
+    checkbox.checked=selected.includes(item);
+    checkbox.dataset.activity=item;
+
+    checkbox.addEventListener("change",()=>{
+      const target = type === "male" ? maleSelected : femaleSelected;
+      if(checkbox.checked){
+        if(!target.includes(item)) target.push(item);
+      }else{
+        const index=target.indexOf(item);
+        if(index>=0) target.splice(index,1);
+      }
+      saveData();
+      renderChoices();
+      generateWheel();
+    });
+
+    const text=document.createElement("span");
+    text.textContent=item;
+    label.append(checkbox,text);
+    container.appendChild(label);
+  });
+}
+
+function renderAll(){
+  renderList();
+  renderChoices();
+  generateWheel();
+}
+
+function generateWheel(items=getCommonActivities()){
+  wheel.innerHTML="";
+  if(!items.length){
+    wheel.style.background="#ddd";
+    return;
+  }
+
+  const angle=360/items.length;
+  const gradients=items.map((item,index)=>{
+    const start=index*angle;
+    return `${colors[index%colors.length]} ${start}deg ${start+angle}deg`;
+  });
+
+  items.forEach((item,index)=>{
+    const label=document.createElement("div");
+    label.className="segment-label";
+    label.textContent=item;
+    label.title=item;
+    label.style.transform =
+      `rotate(${index*angle+angle/2}deg) translate(${Math.min(145, wheel.clientWidth*.33)}px) rotate(90deg)`;
+    wheel.appendChild(label);
+  });
+
+  wheel.style.background=`conic-gradient(${gradients.join(",")})`;
+}
+
+function spin(items, modeName){
+  if(spinning) return;
+
+  items=unique(items);
+  if(!items.length){
+    result.textContent = modeName === "共識"
+      ? "目前沒有共同意願，先勾選雙方都願意的活動 💕"
+      : "沒有可抽選的項目，先新增活動吧 💕";
+    return;
+  }
+
+  spinning=true;
+  setButtonsDisabled(true);
+  generateWheel(items);
+
+  const selectedIndex=Math.floor(Math.random()*items.length);
+  const selectedItem=items[selectedIndex];
+  const segmentAngle=360/items.length;
+
+  // 指針位於 0deg 頂端，將目標區段中心轉到指針位置
+  const target = 360 - (selectedIndex*segmentAngle + segmentAngle/2);
+  const normalizedCurrent=((currentRotation%360)+360)%360;
+  const delta=(target-normalizedCurrent+360)%360;
+
+  currentRotation += 360*5 + delta;
+  wheel.style.transform=`rotate(${currentRotation}deg)`;
+
+  result.innerHTML=`<div class="status">🎡 ${modeName}轉盤旋轉中...</div>`;
+
+  setTimeout(()=>{
+    spinning=false;
+    setButtonsDisabled(false);
+    launchConfetti();
+    result.innerHTML=`
+      <div class="winner-title">🎉 恭喜抽中 🎉</div>
+      <div class="winner-item">💕 ${escapeHtml(selectedItem)}</div>
+      <div class="status">今天就去做這件事吧！</div>
+    `;
+  },5000);
+}
+
+function escapeHtml(value){
+  const div=document.createElement("div");
+  div.textContent=value;
+  return div.innerHTML;
+}
+
+function findMatch(){
+  const common=getCommonActivities();
+  if(!common.length){
+    result.textContent="目前沒有共同意願 💭";
+    return;
+  }
+  result.innerHTML=`<div>💕 雙方都願意</div><div class="winner-item">${common.map(escapeHtml).join("、")}</div>`;
+}
+
+function setButtonsDisabled(disabled){
+  document.querySelectorAll(".action-btn").forEach(btn=>btn.disabled=disabled);
+}
+
+function launchConfetti(){
+  const confettiColors=["#FF4D6D","#FFD166","#6BCB77","#6EC1FF","#B983FF","#FF8FAB"];
+  for(let i=0;i<120;i++){
+    const c=document.createElement("div");
+    c.className="confetti";
+    c.style.left=Math.random()*window.innerWidth+"px";
+    c.style.width=5+Math.random()*8+"px";
+    c.style.height=6+Math.random()*12+"px";
+    c.style.background=confettiColors[Math.floor(Math.random()*confettiColors.length)];
+    c.style.animationDuration=2+Math.random()*2+"s";
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(),4500);
+  }
+}
+
+$("maleAddBtn").addEventListener("click",()=>addActivity("male"));
+$("femaleAddBtn").addEventListener("click",()=>addActivity("female"));
+
+maleInput.addEventListener("keydown",e=>{
+  if(e.key==="Enter") addActivity("male");
+});
+femaleInput.addEventListener("keydown",e=>{
+  if(e.key==="Enter") addActivity("female");
+});
+
+$("matchBtn").addEventListener("click",findMatch);
+$("commonSpinBtn").addEventListener("click",()=>spin(getCommonActivities(),"共識"));
+$("allSpinBtn").addEventListener("click",()=>spin(getAllActivities(),"全部"));
+$("maleSpinBtn").addEventListener("click",()=>spin(maleActivities,"男友"));
+$("femaleSpinBtn").addEventListener("click",()=>spin(femaleActivities,"女友"));
+
+window.addEventListener("resize",()=>{
+  if(!spinning) generateWheel();
+});
+
+loadData();
+renderAll();
+</script>
+</body>
+</html>
