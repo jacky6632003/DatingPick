@@ -22,11 +22,33 @@ body{
 }
 button,input{font:inherit}
 button{border:0}
-.hero{text-align:center;padding:42px 20px 24px}
+.hero{text-align:center;padding:42px 20px 20px}
 .hero h1{font-size:clamp(2.2rem,6vw,3.5rem);color:var(--pink);line-height:1.1}
 .hero p{margin-top:12px;color:var(--muted);font-size:1rem}
 .container{width:min(1200px,100%);margin:auto;padding:20px}
-.couple-section{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+
+/* 身份選擇切換器 */
+.role-selector-card{
+  background:var(--card);border-radius:22px;padding:20px;
+  box-shadow:0 10px 30px rgba(0,0,0,.09);margin-bottom:20px;
+  text-align:center;border:1px solid rgba(255,255,255,.8);
+}
+.role-selector-card h2{font-size:1.2rem;margin-bottom:14px;color:#555}
+.role-tabs{display:flex;justify-content:center;gap:12px}
+.role-btn{
+  padding:12px 24px;border-radius:16px;cursor:pointer;font-weight:700;
+  font-size:1.05rem;background:#f0f0f2;color:#666;transition:all .2s ease;
+  border:2px solid transparent;
+}
+.role-btn.active.male{
+  background:#eef6ff;color:#2b7fff;border-color:var(--blue);
+  box-shadow:0 4px 12px rgba(90,174,255,.25);
+}
+.role-btn.active.female{
+  background:#fff0f3;color:var(--pink);border-color:var(--pink2);
+  box-shadow:0 4px 12px rgba(255,143,171,.25);
+}
+
 .card{
   background:var(--card);border-radius:22px;padding:22px;
   box-shadow:0 10px 30px rgba(0,0,0,.09);
@@ -126,7 +148,7 @@ button{border:0}
 @media(max-width:760px){
   .hero{padding-top:30px}
   .container{padding:14px}
-  .couple-section,.choice-container{grid-template-columns:1fr}
+  .choice-container{grid-template-columns:1fr}
   .card{padding:18px}
   .input-group{flex-direction:column}
   .primary-btn{width:100%}
@@ -144,18 +166,31 @@ button{border:0}
   </header>
 
   <main class="container">
-    <!-- 1. 新增活動區塊 -->
-    <section class="couple-section">
+    <!-- 1. 身份選擇區塊 -->
+    <section class="role-selector-card">
+      <h2>👤 請選擇目前操作的身份</h2>
+      <div class="role-tabs">
+        <button 
+          v-for="partner in partners" 
+          :key="'role-'+partner.id"
+          :class="['role-btn', partner.cssClass, { active: currentRole === partner.id }]"
+          @click="currentRole = partner.id">
+          {{ partner.icon }} {{ partner.title }}
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. 動態新增活動區塊（依據所選身份） -->
+    <section class="couple-section" v-if="activePartner">
       <partner-card
-        v-for="partner in partners"
-        :key="partner.id"
-        :partner="partner"
+        :key="activePartner.id"
+        :partner="activePartner"
         @add-activity="addActivity"
         @delete-activity="deleteActivity">
       </partner-card>
     </section>
 
-    <!-- 2. 雙方意願選擇區塊 -->
+    <!-- 3. 雙方意願選擇區塊 -->
     <section class="card choice-card">
       <h2>💗 雙方意願選擇</h2>
       <div class="choice-container">
@@ -175,7 +210,7 @@ button{border:0}
       </div>
     </section>
 
-    <!-- 3. 轉盤區域 -->
+    <!-- 4. 轉盤區域 -->
     <section class="wheel-area">
       <h2>🎡 共識轉盤</h2>
       <div class="wheel-container">
@@ -240,10 +275,8 @@ const API_CONFIG = {
 };
 
 const apiService = {
-  // 通用 POST 封裝
   async postRequest(url, bodyData = {}) {
     if (API_CONFIG.useMockAPI) {
-      // 模擬網路延遲
       await new Promise(resolve => setTimeout(resolve, 100));
       return null;
     }
@@ -255,7 +288,6 @@ const apiService = {
     return await res.json();
   },
 
-  // 1. [POST] 取得所有資料
   async fetchPartnersData() {
     if (API_CONFIG.useMockAPI) {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -266,35 +298,21 @@ const apiService = {
     }
   },
 
-  // 2. [POST] 新增活動
   async addActivity(partnerId, activityText) {
     if (API_CONFIG.useMockAPI) return { success: true };
-    return await this.postRequest('/partners/activities/add', {
-      partnerId,
-      activity: activityText
-    });
+    return await this.postRequest('/partners/activities/add', { partnerId, activity: activityText });
   },
 
-  // 3. [POST] 刪除活動
   async deleteActivity(partnerId, activityText) {
     if (API_CONFIG.useMockAPI) return { success: true };
-    return await this.postRequest('/partners/activities/delete', {
-      partnerId,
-      activity: activityText
-    });
+    return await this.postRequest('/partners/activities/delete', { partnerId, activity: activityText });
   },
 
-  // 4. [POST] 切換意願勾選
   async toggleSelection(partnerId, activityText, selected) {
     if (API_CONFIG.useMockAPI) return { success: true };
-    return await this.postRequest('/partners/selection/toggle', {
-      partnerId,
-      activity: activityText,
-      selected
-    });
+    return await this.postRequest('/partners/selection/toggle', { partnerId, activity: activityText, selected });
   },
 
-  // 5. [POST] 全量同步/備份 (包含 Mock 回寫 LocalStorage)
   async syncAllData(partners) {
     const dataToSave = partners.map(p => ({
       id: p.id,
@@ -325,7 +343,7 @@ const PartnerCard = {
           :placeholder="partner.placeholder" 
           @keyup.enter="handleAdd"
           autocomplete="off">
-        <button class="primary-btn" type="button" @click="handleAdd">新增</button>
+        <button class="primary-btn" type="button" @click="handleAdd">新增項目</button>
       </div>
       <ul class="activity-list">
         <li v-if="!partner.activities.length" class="empty">還沒有活動，先新增一個吧 💕</li>
@@ -350,13 +368,15 @@ const PartnerCard = {
 createApp({
   components: { PartnerCard },
   setup() {
+    const currentRole = ref('male'); // 預設選擇 Jacky ('male')
+
     const partners = ref([
       {
         id: 'male',
         title: 'Jacky',
         icon: '👨',
         cssClass: 'male',
-        placeholder: '例如：看電影',
+        placeholder: '例如：去花園種花、吃燒肉...',
         activities: [],
         selected: []
       },
@@ -365,7 +385,7 @@ createApp({
         title: '紫紫',
         icon: '👩',
         cssClass: 'female',
-        placeholder: '例如：吃甜點',
+        placeholder: '例如：看展覽、吃甜點...',
         activities: [],
         selected: []
       }
@@ -376,6 +396,11 @@ createApp({
     const currentRotation = ref(0);
     const currentWheelItems = ref([]);
     const resultState = ref({ type: 'normal', msg: '' });
+
+    // 當前選中的 Partner 物件
+    const activePartner = computed(() => {
+      return partners.value.find(p => p.id === currentRole.value);
+    });
 
     // 計算屬性：所有活動 (去重)
     const allActivities = computed(() => {
@@ -546,6 +571,8 @@ createApp({
     });
 
     return {
+      currentRole,
+      activePartner,
       partners,
       loading,
       spinning,
