@@ -73,11 +73,49 @@ button{border:0}
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   background:#f7f7f8;padding:10px 12px;border-radius:12px
 }
-.activity-text{overflow-wrap:anywhere}
+.activity-text{overflow-wrap:anywhere;flex:1}
+.action-btns-group{display:flex;gap:6px;flex-none:none}
+.complete-btn{
+  background:#e8f8ea;color:#2e7d32;padding:7px 10px;
+  border-radius:9px;cursor:pointer;font-weight:600
+}
+.restore-btn{
+  background:#e3f2fd;color:#1565c0;padding:7px 10px;
+  border-radius:9px;cursor:pointer;font-weight:600
+}
 .delete-btn{
-  flex:none;background:#ffe1e7;color:#d92e50;padding:7px 10px;
+  background:#ffe1e7;color:#d92e50;padding:7px 10px;
   border-radius:9px;cursor:pointer
 }
+
+/* 獨立已完成歷史紀錄區塊 */
+.completed-card{
+  margin-top:30px;
+  border-top:6px solid var(--green);
+}
+.completed-card h2{color:#2e7d32;display:flex;align-items:center;justify-content:space-between}
+.completed-count{font-size:0.95rem;background:#e8f8ea;padding:4px 12px;border-radius:20px;color:#2e7d32}
+.completed-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+  gap:10px;
+  margin-top:16px;
+}
+.completed-item{
+  background:#f0f8f0;
+  border:1px solid #c8e6c9;
+}
+.completed-badge{
+  font-size:0.8rem;
+  padding:2px 6px;
+  border-radius:6px;
+  margin-right:6px;
+  font-weight:bold;
+}
+.completed-badge.male{background:#eef6ff;color:#2b7fff}
+.completed-badge.female{background:#fff0f3;color:var(--pink)}
+.completed-text{text-decoration:line-through;color:#666}
+
 .choice-card{margin-top:20px}
 .choice-container{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:30px}
 .choice-box h3{margin-bottom:10px}
@@ -154,6 +192,7 @@ button{border:0}
   .primary-btn{width:100%}
   .buttons{gap:6px}
   .action-btn{flex:1 1 42%;padding:11px 10px}
+  .completed-grid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -186,6 +225,7 @@ button{border:0}
         :key="activePartner.id"
         :partner="activePartner"
         @add-activity="addActivity"
+        @complete-activity="completeActivity"
         @delete-activity="deleteActivity">
       </partner-card>
     </section>
@@ -253,6 +293,35 @@ button{border:0}
         </template>
       </div>
     </section>
+
+    <!-- 5. 獨立：已完成約會成就區塊 -->
+    <section class="card completed-card">
+      <h2>
+        <span>🏆 已完成的約會成就</span>
+        <span class="completed-count">共 {{ allCompletedActivities.length }} 個約會</span>
+      </h2>
+      <div v-if="!allCompletedActivities.length" class="empty">
+        還沒有已完成的約會，完成活動後點擊「✅ 完成」來解鎖成就吧！💕
+      </div>
+      <div v-else class="completed-grid">
+        <div 
+          v-for="(item, idx) in allCompletedActivities" 
+          :key="'comp-grid-'+idx" 
+          class="list-item completed-item">
+          <div class="activity-text">
+            <span :class="['completed-badge', item.partnerClass]">
+              {{ item.partnerIcon }} {{ item.partnerTitle }}
+            </span>
+            <span class="completed-text">{{ item.text }}</span>
+          </div>
+          <div class="action-btns-group">
+            <button class="restore-btn" type="button" @click="restoreActivity(item.partnerId, item.text)">↩ 還原</button>
+            <button class="delete-btn" type="button" @click="deleteActivity(item.partnerId, item.text, true)">🗑</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <footer class="footer">💕 Dating Pick · 2026</footer>
@@ -271,7 +340,7 @@ const COLORS = ["#FF6B6B","#FFD93D","#6BCB77","#4D96FF","#B983FF","#FF8FAB","#00
 */
 const API_CONFIG = {
   useMockAPI: true, // 👈 後端上線後改為 false
-  baseURL: 'https://api.yourdomain.com/v1' // 後端 API 根網址
+  baseURL: 'https://api.yourdomain.com/v1'
 };
 
 const apiService = {
@@ -298,26 +367,12 @@ const apiService = {
     }
   },
 
-  async addActivity(partnerId, activityText) {
-    if (API_CONFIG.useMockAPI) return { success: true };
-    return await this.postRequest('/partners/activities/add', { partnerId, activity: activityText });
-  },
-
-  async deleteActivity(partnerId, activityText) {
-    if (API_CONFIG.useMockAPI) return { success: true };
-    return await this.postRequest('/partners/activities/delete', { partnerId, activity: activityText });
-  },
-
-  async toggleSelection(partnerId, activityText, selected) {
-    if (API_CONFIG.useMockAPI) return { success: true };
-    return await this.postRequest('/partners/selection/toggle', { partnerId, activity: activityText, selected });
-  },
-
   async syncAllData(partners) {
     const dataToSave = partners.map(p => ({
       id: p.id,
       activities: p.activities,
-      selected: p.selected
+      selected: p.selected,
+      completed: p.completed || []
     }));
 
     if (API_CONFIG.useMockAPI) {
@@ -332,7 +387,7 @@ const apiService = {
 // 子元件：伴侶卡片
 const PartnerCard = {
   props: ['partner'],
-  emits: ['add-activity', 'delete-activity'],
+  emits: ['add-activity', 'complete-activity', 'delete-activity'],
   template: `
     <div :class="['card', partner.cssClass]">
       <h2>{{ partner.icon }} {{ partner.title }}想做的事</h2>
@@ -345,22 +400,29 @@ const PartnerCard = {
           autocomplete="off">
         <button class="primary-btn" type="button" @click="handleAdd">新增項目</button>
       </div>
+      
+      <!-- 未完成活動清單 -->
       <ul class="activity-list">
-        <li v-if="!partner.activities.length" class="empty">還沒有活動，先新增一個吧 💕</li>
+        <li v-if="!partner.activities.length" class="empty">還沒有未完成的活動，先新增一個吧 💕</li>
         <li v-else v-for="(item, idx) in partner.activities" :key="idx" class="list-item">
           <span class="activity-text">{{ item }}</span>
-          <button class="delete-btn" type="button" @click="$emit('delete-activity', partner.id, item)">🗑 刪除</button>
+          <div class="action-btns-group">
+            <button class="complete-btn" type="button" @click="$emit('complete-activity', partner.id, item)">✅ 完成</button>
+            <button class="delete-btn" type="button" @click="$emit('delete-activity', partner.id, item, false)">🗑</button>
+          </div>
         </li>
       </ul>
     </div>
   `,
   setup(props, { emit }) {
     const inputText = ref('');
+
     const handleAdd = () => {
       if (!inputText.value) return;
       emit('add-activity', props.partner.id, inputText.value);
       inputText.value = '';
     };
+
     return { inputText, handleAdd };
   }
 };
@@ -378,7 +440,8 @@ createApp({
         cssClass: 'male',
         placeholder: '例如：去花園種花、吃燒肉...',
         activities: [],
-        selected: []
+        selected: [],
+        completed: []
       },
       {
         id: 'female',
@@ -387,7 +450,8 @@ createApp({
         cssClass: 'female',
         placeholder: '例如：看展覽、吃甜點...',
         activities: [],
-        selected: []
+        selected: [],
+        completed: []
       }
     ]);
 
@@ -397,18 +461,34 @@ createApp({
     const currentWheelItems = ref([]);
     const resultState = ref({ type: 'normal', msg: '' });
 
-    // 當前選中的 Partner 物件
     const activePartner = computed(() => {
       return partners.value.find(p => p.id === currentRole.value);
     });
 
-    // 計算屬性：所有活動 (去重)
     const allActivities = computed(() => {
       const all = partners.value.flatMap(p => p.activities);
       return [...new Set(all)];
     });
 
-    // 計算屬性：共同選擇
+    // 獨立聚合所有已完成的項目
+    const allCompletedActivities = computed(() => {
+      const list = [];
+      partners.value.forEach(p => {
+        if (Array.isArray(p.completed)) {
+          p.completed.forEach(item => {
+            list.push({
+              partnerId: p.id,
+              partnerTitle: p.title,
+              partnerIcon: p.icon,
+              partnerClass: p.cssClass,
+              text: item
+            });
+          });
+        }
+      });
+      return list;
+    });
+
     const commonActivities = computed(() => {
       if (partners.value.length < 2) return [];
       const maleSel = partners.value[0].selected;
@@ -416,7 +496,6 @@ createApp({
       return maleSel.filter(x => femaleSel.includes(x));
     });
 
-    // 輪播背景與轉速控制
     const wheelStyle = computed(() => {
       const items = currentWheelItems.value;
       if (!items.length) return { background: '#ddd', transform: `rotate(${currentRotation.value}deg)` };
@@ -438,7 +517,7 @@ createApp({
       };
     };
 
-    // 新增活動 [POST]
+    // 新增活動
     const addActivity = async (partnerId, text) => {
       const partner = partners.value.find(p => p.id === partnerId);
       if (partner.activities.includes(text)) {
@@ -446,43 +525,68 @@ createApp({
         return;
       }
       partner.activities.push(text);
-
-      await apiService.addActivity(partnerId, text);
       await apiService.syncAllData(partners.value);
     };
 
-    // 刪除活動 [POST]
-    const deleteActivity = async (partnerId, text) => {
+    // 標記完成活動
+    const completeActivity = async (partnerId, text) => {
       const partner = partners.value.find(p => p.id === partnerId);
       const idx = partner.activities.indexOf(text);
-      if (idx > -1) partner.activities.splice(idx, 1);
-      
-      // 清理勾選項目
-      partners.value.forEach(p => {
-        p.selected = p.selected.filter(x => x !== text);
-      });
+      if (idx > -1) {
+        partner.activities.splice(idx, 1);
+        if (!partner.completed) partner.completed = [];
+        partner.completed.push(text);
 
-      await apiService.deleteActivity(partnerId, text);
+        // 自動從雙方勾選中移除該項目
+        partners.value.forEach(p => {
+          p.selected = p.selected.filter(x => x !== text);
+        });
+
+        resultState.value = { type: 'normal', msg: `🎉 太棒了！完成了「${text}」` };
+        await apiService.syncAllData(partners.value);
+      }
+    };
+
+    // 還原已完成活動
+    const restoreActivity = async (partnerId, text) => {
+      const partner = partners.value.find(p => p.id === partnerId);
+      if (!partner || !partner.completed) return;
+      const idx = partner.completed.indexOf(text);
+      if (idx > -1) {
+        partner.completed.splice(idx, 1);
+        partner.activities.push(text);
+        await apiService.syncAllData(partners.value);
+      }
+    };
+
+    // 刪除活動
+    const deleteActivity = async (partnerId, text, isCompleted = false) => {
+      const partner = partners.value.find(p => p.id === partnerId);
+      if (!partner) return;
+      if (isCompleted) {
+        const idx = partner.completed.indexOf(text);
+        if (idx > -1) partner.completed.splice(idx, 1);
+      } else {
+        const idx = partner.activities.indexOf(text);
+        if (idx > -1) partner.activities.splice(idx, 1);
+        partners.value.forEach(p => {
+          p.selected = p.selected.filter(x => x !== text);
+        });
+      }
       await apiService.syncAllData(partners.value);
     };
 
-    // 切換勾選狀態 [POST]
+    // 切換勾選狀態
     const toggleSelection = async (partnerId, text) => {
       const partner = partners.value.find(p => p.id === partnerId);
       if (!partner) return;
 
       const idx = partner.selected.indexOf(text);
-      let isSelected = false;
-
       if (idx > -1) {
         partner.selected.splice(idx, 1);
-        isSelected = false;
       } else {
         partner.selected.push(text);
-        isSelected = true;
       }
-
-      await apiService.toggleSelection(partnerId, text, isSelected);
       await apiService.syncAllData(partners.value);
     };
 
@@ -544,7 +648,7 @@ createApp({
       }
     };
 
-    // 初始化讀取資料 [POST]
+    // 初始化讀取資料
     const loadData = async () => {
       loading.value = true;
       try {
@@ -555,6 +659,7 @@ createApp({
             if (partner) {
               partner.activities = Array.isArray(sData.activities) ? sData.activities : [];
               partner.selected = Array.isArray(sData.selected) ? sData.selected : [];
+              partner.completed = Array.isArray(sData.completed) ? sData.completed : [];
             }
           });
         }
@@ -577,12 +682,15 @@ createApp({
       loading,
       spinning,
       allActivities,
+      allCompletedActivities,
       commonActivities,
       currentWheelItems,
       wheelStyle,
       resultState,
       getSegmentStyle,
       addActivity,
+      completeActivity,
+      restoreActivity,
       deleteActivity,
       toggleSelection,
       findMatch,
