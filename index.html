@@ -81,6 +81,14 @@ button{border:0}
 .restore-btn{background:#e3f2fd;color:#1565c0}
 .delete-btn{background:#ffe1e7;color:#d92e50}
 
+/* 禁用狀態樣式 */
+input:disabled, button:disabled {
+  background-color: #f0f0f0 !important;
+  color: #aaa !important;
+  cursor: not-allowed !important;
+  border-color: #ddd !important;
+}
+
 /* 已完成區塊 */
 .completed-card{margin-top:30px;border-top:6px solid var(--green)}
 .completed-card h2{color:#2e7d32;display:flex;align-items:center;justify-content:space-between}
@@ -101,6 +109,8 @@ button{border:0}
 }
 .choice-label:hover{background:#f0f0f2}
 .choice-label input{width:18px;height:18px;accent-color:var(--pink)}
+.choice-label.disabled{cursor:not-allowed;opacity:0.75}
+.choice-label.disabled:hover{background:#f7f7f8}
 .common-summary{
   margin-top:18px;padding:14px 16px;border-radius:14px;
   background:#fff3f6;text-align:center;color:#c92f50;font-weight:700
@@ -192,7 +202,7 @@ button{border:0}
       </div>
     </section>
 
-    <!-- 2. 活動新增區塊（成員分別卡片） -->
+    <!-- 2. 活動新增區塊（限制非當前操作者不可新增/編輯） -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
       <section class="card" v-for="m in members" :key="'add-'+m.memberId">
         <h2>{{ m.icon }} {{ m.name }} 想做的事</h2>
@@ -200,14 +210,19 @@ button{border:0}
           <input 
             v-model="draft[m.memberId]" 
             placeholder="新增約會活動..." 
-            @keyup.enter="add(m.memberId)">
-          <button class="primary-btn" type="button" @click="add(m.memberId)">新增</button>
+            :disabled="m.memberId !== memberId"
+            @keyup.enter="m.memberId === memberId && add(m.memberId)">
+          <button 
+            class="primary-btn" 
+            type="button" 
+            :disabled="m.memberId !== memberId"
+            @click="add(m.memberId)">新增</button>
         </div>
         <ul class="activity-list">
           <li v-if="!owned(m.memberId).length" class="empty">尚無待辦活動 💕</li>
           <li v-else v-for="a in owned(m.memberId)" :key="a.activityId" class="list-item">
             <span class="activity-text">{{ a.activityText }}</span>
-            <div class="action-btns-group">
+            <div class="action-btns-group" v-if="m.memberId === memberId">
               <button class="edit-btn" @click="edit(a)">編輯</button>
               <button class="complete-btn" @click="complete(a)">完成</button>
               <button class="delete-btn" @click="remove(a)">刪除</button>
@@ -217,7 +232,7 @@ button{border:0}
       </section>
     </div>
 
-    <!-- 3. 雙方意願選擇區塊 -->
+    <!-- 3. 雙方意願選擇區塊（限制非當前操作者不可勾選） -->
     <section class="card choice-card">
       <h2>💗 雙方意願選擇紀錄</h2>
       <div class="choice-container">
@@ -225,10 +240,15 @@ button{border:0}
           <h3>{{ m.icon }} {{ m.name }} 的意願清單</h3>
           <div class="choice-list">
             <div v-if="!activities.length" class="empty">請先在上方新增活動</div>
-            <label v-else v-for="a in activities" :key="'sel-'+m.memberId+'-'+a.activityId" class="choice-label">
+            <label 
+              v-else 
+              v-for="a in activities" 
+              :key="'sel-'+m.memberId+'-'+a.activityId" 
+              :class="['choice-label', { disabled: m.memberId !== memberId }]">
               <input 
                 type="checkbox" 
                 :checked="selected(a, m.memberId)" 
+                :disabled="m.memberId !== memberId"
                 @change="select(a, m.memberId, $event.target.checked)">
               <span>{{ a.activityText }}</span>
             </label>
@@ -313,7 +333,7 @@ button{border:0}
             <span class="completed-badge">{{ getOwnerName(a.ownerMemberId) }}</span>
             <span class="completed-text">{{ a.activityText }}</span>
           </div>
-          <div class="action-btns-group">
+          <div class="action-btns-group" v-if="a.ownerMemberId === memberId">
             <button class="restore-btn" @click="restore(a)">↩ 還原</button>
             <button class="delete-btn" @click="remove(a)">🗑</button>
           </div>
@@ -469,21 +489,33 @@ createApp({
 
     /* CRUD 操作 API 相容 handlers */
     const add = async (ownerId) => {
+      if (ownerId !== memberId.value) return; // 安全防護：非本人不能操作
       const text = (draft.value[ownerId] || '').trim();
       if (!text) return;
       try {
         if (mode.value === 'api') {
-          await request('/couples/' + APP_CONFIG.coupleId + '/activities', {
+          // 在 API 模式下建立活動，並直接為建立者自動勾選意願
+          const newActivity = await request('/couples/' + APP_CONFIG.coupleId + '/activities', {
             method: 'POST',
             body: JSON.stringify({ ownerMemberId: ownerId, activityText: text })
           });
+          if (newActivity && newActivity.activityId) {
+            await request('/couples/' + APP_CONFIG.coupleId + '/activities/' + newActivity.activityId + '/selection', {
+              method: 'PUT',
+              body: JSON.stringify({ memberId: ownerId, isSelected: true })
+            });
+          }
         } else {
+          // 本地模式：預設建立者本人為 true，其他人為 false
+          const initialSelections = Object.fromEntries(
+            members.value.map(m => [m.memberId, m.memberId === ownerId])
+          );
           activities.value.push({
             activityId: crypto.randomUUID(),
             ownerMemberId: ownerId,
             activityText: text,
             status: 'Active',
-            selections: Object.fromEntries(members.value.map(m => [m.memberId, false]))
+            selections: initialSelections
           });
           saveLocal();
         }
@@ -495,6 +527,7 @@ createApp({
     };
 
     const select = async (a, mId, val) => {
+      if (mId !== memberId.value) return; // 安全防護：非本人不能勾選
       try {
         if (mode.value === 'api') {
           await request('/couples/' + APP_CONFIG.coupleId + '/activities/' + a.activityId + '/selection', {
@@ -514,6 +547,7 @@ createApp({
     };
 
     const edit = async (a) => {
+      if (a.ownerMemberId !== memberId.value) return; // 安全防護
       const newText = prompt('修改活動名稱', a.activityText);
       if (newText === null || !newText.trim()) return;
       try {
@@ -533,6 +567,7 @@ createApp({
     };
 
     const complete = async (a) => {
+      if (a.ownerMemberId !== memberId.value) return; // 安全防護
       if (!confirm(`確定完成了「${a.activityText}」？`)) return;
       try {
         if (mode.value === 'api') {
@@ -552,6 +587,7 @@ createApp({
     };
 
     const remove = async (a) => {
+      if (a.ownerMemberId !== memberId.value) return; // 安全防護
       if (!confirm(`確定刪除「${a.activityText}」？`)) return;
       try {
         if (mode.value === 'api') {
@@ -568,6 +604,7 @@ createApp({
     };
 
     const restore = async (a) => {
+      if (a.ownerMemberId !== memberId.value) return; // 安全防護
       try {
         if (mode.value === 'api') {
           await request('/couples/' + APP_CONFIG.coupleId + '/activities/' + a.activityId + '/restore', { method: 'POST' });
