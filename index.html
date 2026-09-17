@@ -180,11 +180,31 @@ input:disabled, button:disabled {
 .result{min-height:48px;margin-top:24px;font-size:22px;font-weight:800;color:var(--pink)}
 .winner-item{font-size:clamp(26px,6vw,40px);margin-top:10px;overflow-wrap:anywhere}
 
-/* 歷史抽選紀錄區塊 */
-.history-card{margin-top:30px;border-top:6px solid var(--purple)}
-.history-card h2{color:#6b21a8;display:flex;align-items:center;justify-content:space-between}
-.history-count{font-size:0.95rem;background:#f3e8ff;padding:4px 12px;border-radius:20px;color:#6b21a8}
-.history-list{list-style:none;margin-top:16px;display:grid;gap:10px}
+/* 分頁（Tabs）與分頁控制樣式 */
+.tab-card{margin-top:30px;padding:0;overflow:hidden;}
+.tab-header{
+  display:flex;background:#f4f4f5;border-bottom:2px solid #e4e4e7;
+}
+.tab-btn{
+  flex:1;padding:16px;text-align:center;font-size:1.05rem;font-weight:bold;
+  color:#71717a;cursor:pointer;background:transparent;transition:all 0.2s ease;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.tab-btn:hover{background:#e4e4e7}
+.tab-btn.active{
+  background:#fff;color:var(--pink);border-bottom:3px solid var(--pink);
+  margin-bottom:-2px;
+}
+.tab-badge{
+  font-size:0.85rem;padding:2px 8px;border-radius:12px;background:#e4e4e7;color:#52525b;
+}
+.tab-btn.active .tab-badge{
+  background:#ffe8ee;color:var(--pink);
+}
+.tab-content{padding:22px}
+
+/* 歷史抽選紀錄樣式 */
+.history-list{list-style:none;display:grid;gap:10px}
 .history-item{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   background:#fcf8ff;border:1px solid #e9d5ff;padding:12px 16px;border-radius:14px;
@@ -194,17 +214,26 @@ input:disabled, button:disabled {
 .history-operator{font-weight:bold;color:#4c1d95;background:#f3e8ff;padding:3px 8px;border-radius:6px}
 .history-text{font-size:1.05rem;font-weight:bold;color:#18181b;overflow-wrap:anywhere}
 
-/* 已完成區塊 */
-.completed-card{margin-top:30px;border-top:6px solid var(--green)}
-.completed-card h2{color:#2e7d32;display:flex;align-items:center;justify-content:space-between}
-.completed-count{font-size:0.95rem;background:#e8f8ea;padding:4px 12px;border-radius:20px;color:#2e7d32}
-.completed-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:10px;margin-top:16px}
+/* 已完成區塊樣式 */
+.completed-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:10px}
 .completed-item{background:#f0f8f0;border:1px solid #c8e6c9}
 .completed-badge{font-size:0.8rem;padding:2px 6px;border-radius:6px;margin-right:6px;font-weight:bold;background:#fff;border:1px solid #ddd}
 .completed-text{text-decoration:line-through;color:#666}
 
+/* 頁碼控制控制列 */
+.pagination{
+  display:flex;justify-content:center;align-items:center;gap:12px;
+  margin-top:20px;padding-top:16px;border-top:1px dashed #e4e4e7;
+}
+.page-btn{
+  padding:8px 16px;border-radius:10px;background:#f4f4f5;color:#333;
+  font-weight:600;cursor:pointer;transition:all 0.2s ease;
+}
+.page-btn:hover:not(:disabled){background:#ffe8ee;color:var(--pink)}
+.page-info{font-size:0.95rem;font-weight:bold;color:#666}
+
 .footer{text-align:center;padding:35px 20px;color:#888}
-.empty{padding:14px;color:#999;text-align:center;background:#fafafa;border-radius:12px}
+.empty{padding:20px;color:#999;text-align:center;background:#fafafa;border-radius:12px}
 .confetti{
   position:fixed;top:-20px;z-index:9999;pointer-events:none;
   animation:fall linear forwards;border-radius:2px
@@ -371,42 +400,72 @@ input:disabled, button:disabled {
       </div>
     </section>
 
-    <!-- 5. 新增：歷史抽選紀錄區塊 -->
-    <section class="card history-card">
-      <h2>
-        <span>🎉 歷史抽選紀錄</span>
-        <span class="history-count">共 {{ spinHistory.length }} 次紀錄</span>
-      </h2>
-      <div v-if="!spinHistory.length" class="empty">尚無轉盤抽選紀錄，快去轉動轉盤吧！</div>
-      <ul v-else class="history-list">
-        <li v-for="h in spinHistory" :key="h.historyId" class="history-item">
-          <div class="history-info">
-            <span class="history-time">⏱ {{ h.timestamp }}</span>
-            <span class="history-operator">👤 {{ getOwnerName(h.operatorMemberId) }}</span>
-            <span class="history-text">🎯 抽中：「{{ h.activityText }}」</span>
-          </div>
-          <button class="action-btns-group delete-btn" @click="removeHistory(h)">🗑 刪除</button>
-        </li>
-      </ul>
-    </section>
+    <!-- 5. 整合頁籤：歷史紀錄與完成成就 (含頁碼分頁) -->
+    <section class="card tab-card">
+      <div class="tab-header">
+        <button 
+          :class="['tab-btn', { active: activeTab === 'history' }]" 
+          @click="activeTab = 'history'">
+          <span>🎉 歷史抽選紀錄</span>
+          <span class="tab-badge">{{ spinHistory.length }}</span>
+        </button>
+        <button 
+          :class="['tab-btn', { active: activeTab === 'completed' }]" 
+          @click="activeTab = 'completed'">
+          <span>🏆 已完成約會</span>
+          <span class="tab-badge">{{ completed.length }}</span>
+        </button>
+      </div>
 
-    <!-- 6. 已完成約會成就牆 -->
-    <section class="card completed-card">
-      <h2>
-        <span>🏆 已完成的約會成就</span>
-        <span class="completed-count">共 {{ completed.length }} 個紀錄</span>
-      </h2>
-      <div v-if="!completed.length" class="empty">尚無完成紀錄，完成活動後將會解鎖成就！</div>
-      <div v-else class="completed-grid">
-        <div v-for="a in completed" :key="'comp-'+a.activityId" class="list-item completed-item">
-          <div class="activity-text">
-            <span class="completed-badge">{{ getOwnerName(a.ownerMemberId) }}</span>
-            <span class="completed-text">{{ a.activityText }}</span>
-          </div>
-          <div class="action-btns-group" v-if="a.ownerMemberId === memberId">
-            <button class="restore-btn" @click="restore(a)">↩ 還原</button>
-            <button class="delete-btn" @click="remove(a)">🗑</button>
-          </div>
+      <div class="tab-content">
+        <!-- 分頁 1: 歷史抽選紀錄 -->
+        <div v-if="activeTab === 'history'">
+          <div v-if="!spinHistory.length" class="empty">尚無轉盤抽選紀錄，快去轉動轉盤吧！</div>
+          <template v-else>
+            <ul class="history-list">
+              <li v-for="h in pagedHistory" :key="h.historyId" class="history-item">
+                <div class="history-info">
+                  <span class="history-time">⏱ {{ h.timestamp }}</span>
+                  <span class="history-operator">👤 {{ getOwnerName(h.operatorMemberId) }}</span>
+                  <span class="history-text">🎯 抽中：「{{ h.activityText }}」</span>
+                </div>
+                <button class="action-btns-group delete-btn" @click="removeHistory(h)">🗑 刪除</button>
+              </li>
+            </ul>
+
+            <!-- 歷史紀錄頁碼控制 -->
+            <div class="pagination" v-if="totalHistoryPages > 1">
+              <button class="page-btn" :disabled="historyPage === 1" @click="historyPage--">◀ 上一頁</button>
+              <span class="page-info">第 {{ historyPage }} / {{ totalHistoryPages }} 頁</span>
+              <button class="page-btn" :disabled="historyPage === totalHistoryPages" @click="historyPage++">下一頁 ▶</button>
+            </div>
+          </template>
+        </div>
+
+        <!-- 分頁 2: 已完成約會成就 -->
+        <div v-if="activeTab === 'completed'">
+          <div v-if="!completed.length" class="empty">尚無完成紀錄，完成活動後將會解鎖成就！</div>
+          <template v-else>
+            <div class="completed-grid">
+              <div v-for="a in pagedCompleted" :key="'comp-'+a.activityId" class="list-item completed-item">
+                <div class="activity-text">
+                  <span class="completed-badge">{{ getOwnerName(a.ownerMemberId) }}</span>
+                  <span class="completed-text">{{ a.activityText }}</span>
+                </div>
+                <div class="action-btns-group" v-if="a.ownerMemberId === memberId">
+                  <button class="restore-btn" @click="restore(a)">↩ 還原</button>
+                  <button class="delete-btn" @click="remove(a)">🗑</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 已完成約頁碼控制 -->
+            <div class="pagination" v-if="totalCompletedPages > 1">
+              <button class="page-btn" :disabled="completedPage === 1" @click="completedPage--">◀ 上一頁</button>
+              <span class="page-info">第 {{ completedPage }} / {{ totalCompletedPages }} 頁</span>
+              <button class="page-btn" :disabled="completedPage === totalCompletedPages" @click="completedPage++">下一頁 ▶</button>
+            </div>
+          </template>
         </div>
       </div>
     </section>
@@ -416,13 +475,15 @@ input:disabled, button:disabled {
 </div>
 
 <script>
-const { createApp, ref, computed, onMounted } = Vue;
+const { createApp, ref, computed, onMounted, watch } = Vue;
 
 const APP_CONFIG = {
   dataMode: localStorage.getItem('dating_pick_mode') || 'local',
   apiBaseUrl: 'http://localhost:5000/api/v1',
   coupleId: '11111111-1111-1111-1111-111111111111'
 };
+
+const PAGE_SIZE = 5; // 每頁顯示 5 筆
 
 const PALETTE = [
   "#FF6B6B", "#4D96FF", "#FFD166", "#6BCB77", "#B983FF", 
@@ -452,7 +513,8 @@ createApp({
     const members = ref([]);
     const activities = ref([]);
     const completed = ref([]);
-    const spinHistory = ref([]); // 抽選歷史紀錄
+    const spinHistory = ref([]);
+    const activeTab = ref('history');
     const memberId = ref('22222222-2222-2222-2222-222222222222');
     const targetMemberId = ref('22222222-2222-2222-2222-222222222222');
     const draft = ref({});
@@ -460,6 +522,33 @@ createApp({
     const spinning = ref(false);
     const rotation = ref(0);
     const result = ref('');
+
+    // 分頁頁碼狀態
+    const historyPage = ref(1);
+    const completedPage = ref(1);
+
+    // 計算總頁數
+    const totalHistoryPages = computed(() => Math.ceil(spinHistory.value.length / PAGE_SIZE) || 1);
+    const totalCompletedPages = computed(() => Math.ceil(completed.value.length / PAGE_SIZE) || 1);
+
+    // 切頁時截取資料
+    const pagedHistory = computed(() => {
+      const start = (historyPage.value - 1) * PAGE_SIZE;
+      return spinHistory.value.slice(start, start + PAGE_SIZE);
+    });
+
+    const pagedCompleted = computed(() => {
+      const start = (completedPage.value - 1) * PAGE_SIZE;
+      return completed.value.slice(start, start + PAGE_SIZE);
+    });
+
+    // 避免資料刪除後，頁碼落在超過總頁數的位置
+    watch(totalHistoryPages, (newVal) => {
+      if (historyPage.value > newVal) historyPage.value = newVal;
+    });
+    watch(totalCompletedPages, (newVal) => {
+      if (completedPage.value > newVal) completedPage.value = newVal;
+    });
 
     const request = async (path, options = {}) => {
       const res = await fetch(APP_CONFIG.apiBaseUrl + path, {
@@ -505,6 +594,8 @@ createApp({
     const switchMode = () => {
       localStorage.setItem('dating_pick_mode', mode.value);
       result.value = '';
+      historyPage.value = 1;
+      completedPage.value = 1;
       load();
     };
 
@@ -711,7 +802,6 @@ createApp({
       }
     };
 
-    // 刪除歷史紀錄
     const removeHistory = async (h) => {
       if (!confirm(`確定刪除這筆抽中「${h.activityText}」的紀錄？`)) return;
       try {
@@ -742,7 +832,6 @@ createApp({
       }
     };
 
-    /* 格式化當前時間 (YYYY-MM-DD HH:mm:ss) */
     const getFormattedDate = () => {
       const now = new Date();
       const pad = num => String(num).padStart(2, '0');
@@ -794,7 +883,6 @@ createApp({
           spinning.value = false;
           launchConfetti();
 
-          // 寫入歷史紀錄
           const newHistoryItem = {
             historyId: crypto.randomUUID(),
             operatorMemberId: memberId.value,
@@ -806,8 +894,11 @@ createApp({
             spinHistory.value.unshift(newHistoryItem);
             saveLocal();
           } else {
-            await load(); // API 模式下直接重新讀取後端最新紀錄
+            await load();
           }
+
+          // 抽選完成後，將歷史紀錄跳回第一頁
+          historyPage.value = 1;
         }, 5000);
       } catch (e) {
         spinning.value = false;
@@ -818,8 +909,9 @@ createApp({
     onMounted(load);
 
     return {
-      mode, members, activities, completed, spinHistory, memberId, targetMemberId, draft,
+      mode, members, activities, completed, spinHistory, activeTab, memberId, targetMemberId, draft,
       spinMode, spinning, rotation, result, wheelDisplayItems, wheelStyle,
+      historyPage, completedPage, totalHistoryPages, totalCompletedPages, pagedHistory, pagedCompleted,
       owned, selected, getMemberSelectedCount, common, getOwnerName, getSegmentStyle, selectMemberSpin,
       add, select, edit, complete, remove, restore, removeHistory, spin, switchMode
     };
