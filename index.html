@@ -108,6 +108,7 @@ button{border:0}
 .primary-btn{
   background:var(--pink);color:#fff;padding:12px 16px;border-radius:12px;
   cursor:pointer;font-weight:700;white-space:nowrap;transition: all 0.2s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
 }
 .primary-btn:hover:not(:disabled){filter:brightness(.96); transform: translateY(-1px);}
 .activity-list{list-style:none;margin-top:16px;display:grid;gap:8px}
@@ -132,6 +133,21 @@ input:disabled, button:disabled {
   border-color: #ddd !important;
   box-shadow: none !important;
   transform: none !important;
+}
+
+/* Loading 動畫樣式 */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ==========================================
@@ -329,14 +345,17 @@ input:disabled, button:disabled {
             v-model="draft[m.memberId]" 
             placeholder="新增約會活動..." 
             maxlength="20"
-            :disabled="m.memberId !== memberId"
-            @keyup.enter="m.memberId === memberId && add(m.memberId)">
+            :disabled="m.memberId !== memberId || isAdding[m.memberId]"
+            @keyup.enter="m.memberId === memberId && !isAdding[m.memberId] && add(m.memberId)">
           <span class="char-count" v-if="m.memberId === memberId && draft[m.memberId]">{{ draft[m.memberId].length }}/20</span>
           <button 
             class="primary-btn" 
             type="button" 
-            :disabled="m.memberId !== memberId"
-            @click="add(m.memberId)">新增</button>
+            :disabled="m.memberId !== memberId || isAdding[m.memberId]"
+            @click="add(m.memberId)">
+            <span v-if="isAdding[m.memberId]" class="spinner"></span>
+            <span>{{ isAdding[m.memberId] ? '新增中...' : '新增' }}</span>
+          </button>
         </div>
         <ul class="activity-list">
           <li v-if="!owned(m.memberId).length" class="empty">尚無待辦活動 💕</li>
@@ -512,7 +531,7 @@ const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
 
 const APP_CONFIG = {
   dataMode: localStorage.getItem('dating_pick_mode') || 'local',
-  apiBaseUrl: 'http://localhost:5000/api/v1',
+  apiBaseUrl: 'http://datingpick.somee.com/DatingPick/api/v1',
   coupleId: '11111111-1111-1111-1111-111111111111'
 };
 
@@ -548,6 +567,7 @@ createApp({
     const memberId = ref('22222222-2222-2222-2222-222222222222');
     const targetMemberId = ref('22222222-2222-2222-2222-222222222222');
     const draft = ref({});
+    const isAdding = ref({}); // 紀錄特定成員是否正在處理新增動作
     const spinMode = ref('Common');
     const spinning = ref(false);
     const rotation = ref(0);
@@ -748,10 +768,10 @@ createApp({
     };
 
     /* ----------------------------------------------------
-       CRUD 操作 (僅防呆當前使用者自己的重複輸入)
+       CRUD 操作
        ---------------------------------------------------- */
     const add = async (ownerId) => {
-      if (ownerId !== memberId.value) return;
+      if (ownerId !== memberId.value || isAdding.value[ownerId]) return;
       const text = (draft.value[ownerId] || '').trim();
       
       // 防呆 1：空白檢查
@@ -770,6 +790,8 @@ createApp({
         return;
       }
 
+      isAdding.value[ownerId] = true;
+
       try {
         if (mode.value === 'api') {
           const newActivity = await request('/couples/' + APP_CONFIG.coupleId + '/activities', {
@@ -783,6 +805,8 @@ createApp({
             });
           }
         } else {
+          // 模擬 LocalStorage 延遲，體驗 Loading 效果
+          await new Promise(resolve => setTimeout(resolve, 300));
           const initialSelections = Object.fromEntries(members.value.map(m => [m.memberId, m.memberId === ownerId]));
           activities.value.push({
             activityId: crypto.randomUUID(),
@@ -799,6 +823,8 @@ createApp({
         focusInput(ownerId);
       } catch (e) {
         showToast('❌ 新增失敗：' + e.message);
+      } finally {
+        isAdding.value[ownerId] = false;
       }
     };
 
@@ -1025,7 +1051,7 @@ createApp({
     });
 
     return {
-      mode, members, activities, completed, spinHistory, activeTab, memberId, targetMemberId, draft,
+      mode, members, activities, completed, spinHistory, activeTab, memberId, targetMemberId, draft, isAdding,
       spinMode, spinning, rotation, result, wheelDisplayItems, wheelStyle, toasts, inputRefs, isPointerBouncing,
       historyPage, completedPage, totalHistoryPages, totalCompletedPages, pagedHistory, pagedCompleted,
       owned, selected, getMemberSelectedCount, common, getOwnerName, getSegmentStyle, selectMemberSpin, changeMember,
